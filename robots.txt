@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://249769.github.io/rpgm-translation-prompt-generator/sitemap.xml

@@ -1,0 +1,9 @@
+{
+  "name": "RPG Maker 翻译提示词生成器",
+  "short_name": "RPGM翻译工具",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#176b5b",
+  "lang": "zh-CN"
+}
