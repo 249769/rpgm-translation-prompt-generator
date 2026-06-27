@@ -14,6 +14,12 @@ https://github.com/249769/rpgm-translation-prompt-generator
 https://249769.github.io/rpgm-translation-prompt-generator/
 ```
 
+打包下载：
+
+```text
+https://github.com/249769/rpgm-translation-prompt-generator/releases/latest/download/RPGMTranslationPromptGenerator.zip
+```
+
 ## 功能
 
 - 拖入 `data` 和 `js` 文件夹即可离线分析。
