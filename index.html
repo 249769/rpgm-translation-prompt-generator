@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RPG Maker 翻译提示词生成器</title>
-  <meta name="description" content="本地运行的 RPG Maker MZ/MV 文本提取工具，拖入 data 和 js 文件夹即可生成 ChatGPT 翻译批次、提示词、术语表素材和操作指南。">
+  <title>游戏文本翻译提示词生成器</title>
+  <meta name="description" content="本地运行的 RPG Maker 与 Unity 游戏文本提取工具，拖入游戏文件夹即可生成 ChatGPT 翻译批次、提示词、术语表素材和操作指南。">
   <meta name="robots" content="index,follow">
   <link rel="canonical" href="https://249769.github.io/rpgm-translation-prompt-generator/">
   <link rel="stylesheet" href="assets/styles.css">
@@ -13,8 +13,8 @@
   <header class="topbar">
     <div class="shell nav">
       <div>
-        <p class="eyebrow">RPG Maker Local Tool</p>
-        <h1>翻译提示词生成器</h1>
+        <p class="eyebrow">Local Translation Tool</p>
+        <h1>游戏文本翻译提示词生成器</h1>
       </div>
       <a class="repo-link" href="https://github.com/249769/rpgm-translation-prompt-generator" target="_blank" rel="noreferrer">GitHub</a>
     </div>
@@ -23,12 +23,12 @@
   <main class="shell workspace">
     <section class="intro">
       <div>
-        <h2>拖入游戏的 data 和 js 文件夹，生成给 ChatGPT 用的翻译包</h2>
-        <p>所有分析都在浏览器本地完成。工具会自动过滤运行相关文本，拆分批次，生成上传提示词、术语表素材和操作指南。</p>
+        <h2>拖入游戏文件夹，生成给 ChatGPT 用的翻译包</h2>
+        <p>所有分析都在浏览器本地完成。工具会按游戏类型筛选玩家可见文本、拆分批次、生成上传提示词、术语表素材、复核清单和操作指南。</p>
       </div>
       <div class="quick-stats">
         <div><strong id="fileCount">0</strong><span>文件</span></div>
-        <div><strong id="candidateCount">0</strong><span>候选文本</span></div>
+        <div><strong id="candidateCount">0</strong><span>文本</span></div>
         <div><strong id="batchCount">0</strong><span>批次</span></div>
       </div>
     </section>
@@ -36,8 +36,8 @@
     <section class="tool-surface">
       <div id="dropZone" class="drop-zone">
         <div>
-          <h2>把 data 和 js 文件夹拖到这里</h2>
-          <p>也可以用下面的按钮选择整个游戏目录，或多选 data/js 文件夹中的文件。</p>
+          <h2 id="dropTitle">把游戏文件夹拖到这里</h2>
+          <p id="dropDescription">也可以用下面的按钮选择整个游戏目录，或多选需要处理的文件。</p>
         </div>
         <div class="actions">
           <label class="button primary">
@@ -46,9 +46,14 @@
           </label>
           <label class="button secondary">
             选择文件
-            <input id="fileInput" type="file" multiple accept=".json,.js">
+            <input id="fileInput" type="file" multiple>
           </label>
         </div>
+      </div>
+
+      <div class="requirements">
+        <h2>需要丢入哪些文件夹</h2>
+        <div id="requiredFilesHint" class="requirement-list"></div>
       </div>
 
       <div class="settings-grid">
@@ -67,7 +72,8 @@
         <label>
           游戏类型
           <select id="engineType">
-            <option value="mz">RPG Maker MZ / MV</option>
+            <option value="rpgm">RPG Maker MZ / MV</option>
+            <option value="unity">Unity / XUnity AutoTranslator</option>
           </select>
         </label>
       </div>
@@ -104,20 +110,7 @@
 
     <section class="panel">
       <h2>处理范围</h2>
-      <div class="scope-grid">
-        <div>
-          <h3>默认进入翻译批次</h3>
-          <p>数据库名称与说明、地图对话、选项、公共事件、战斗事件、系统术语、plugins.js 中的安全参数文本。</p>
-        </div>
-        <div>
-          <h3>默认进入复核清单</h3>
-          <p>插件源码里的日文字符串。它们可能是解析别名或内部标签，不能直接翻译回填。</p>
-        </div>
-        <div>
-          <h3>默认跳过</h3>
-          <p>note、脚本、开关变量名、事件名、文件名、图片名、音频名、URL、插件源码逻辑。</p>
-        </div>
-      </div>
+      <div id="scopeGrid" class="scope-grid"></div>
     </section>
   </main>
 

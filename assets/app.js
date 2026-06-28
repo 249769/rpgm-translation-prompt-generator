@@ -4,6 +4,10 @@
   const $ = (id) => document.getElementById(id);
   const els = {
     dropZone: $("dropZone"),
+    dropTitle: $("dropTitle"),
+    dropDescription: $("dropDescription"),
+    requiredFilesHint: $("requiredFilesHint"),
+    scopeGrid: $("scopeGrid"),
     folderInput: $("folderInput"),
     fileInput: $("fileInput"),
     runButton: $("runButton"),
@@ -13,6 +17,7 @@
     contextLines: $("contextLines"),
     targetKb: $("targetKb"),
     uploadKb: $("uploadKb"),
+    engineType: $("engineType"),
     fileCount: $("fileCount"),
     candidateCount: $("candidateCount"),
     batchCount: $("batchCount"),
@@ -22,11 +27,22 @@
     preview: $("preview")
   };
 
-  const JP_RE = /[\u3040-\u30ff\u3400-\u9fff]/;
+  const JP_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/;
+  const KANA_RE = /[\u3040-\u30ff]/g;
+  const KANA_TEST_RE = /[\u3040-\u30ff]/;
+  const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff]/g;
+  const CN_PUNCT_RE = /[，。！？；：“”《》]/g;
+  const LATIN_RE = /[A-Za-z]/;
   const MAP_FILE_RE = /^Map\d+\.json$/;
+  const RPGM_FILE_RE = /\.(json|js)$/i;
+  const CONTROL_RE = /(%\d+|\\[A-Za-z]+(?:\[[^\]]*\])?|\\[{}.$|!><^]|_[A-Za-z][A-Za-z0-9_]*)/;
   const FILE_NAME_RE = /\.(png|jpe?g|webp|gif|ogg|m4a|wav|json|js|rpgmvp|rpgmvo)$/i;
   const INTERNAL_URL_RE = /:\/\//;
-  const CONTROL_RE = /(%\d+|\\[A-Za-z]+(?:\[[^\]]*\])?|\\[{}.$|!><^]|_[A-Za-z][A-Za-z0-9_]*)/g;
+  const URL_RE = /^\s*(https?:\/\/|www\.)/i;
+  const DECORATION_RE = /^[\s\-_=*#[\]{}()<>|/\\.:,;!?'"]+$/;
+  const ASSET_OR_PATH_RE = /[/\\]|\.(png|jpg|jpeg|ogg|wav|mp3|mp4|shader|prefab|mat|anim|controller|dll|exe|cs|asset|assets|resource|bytes)\b/i;
+  const MOSTLY_DECORATION_RE = /^[\s\-_=+.,:;!?"'`~[\](){}<>/\\|@#$%^&*、。，．・：；！？ー〜…「」『』（）［］【】《》0-9]+$/;
+  const UTF8_RUN_RE = /[A-Za-z0-9\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\s\-_=+.,:;!?"'`~[\](){}<>/\\|@#$%^&*\u3000、。，．・：；！？ー〜…「」『』（）［］【】《》]{3,}/g;
 
   const DATABASE_FIELDS = {
     "Actors.json": ["name", "nickname", "profile"],
@@ -65,34 +81,46 @@
     "displayText"
   ]);
 
-  const GLOSSARY_SEED = {
-    "レイニア": "蕾妮娅",
-    "ピート": "皮特",
-    "プリシア": "普莉希娅",
-    "ゲイル": "盖尔",
-    "ミシェル": "米歇尔",
-    "アルベール": "阿尔贝尔",
-    "ケイシー": "凯西",
-    "エリオット": "艾略特",
-    "ローザ": "罗莎",
-    "ルシアン": "露西安",
-    "ミアナ": "米娅娜",
-    "スライア": "斯莱娅",
-    "セレスティア": "塞蕾丝蒂娅",
-    "ナーガリア": "娜迦莉娅",
-    "マリエル": "玛丽埃尔",
-    "タビノ": "塔比诺",
-    "エルドリス": "埃尔德里斯",
-    "ギルド": "公会",
-    "ダンジョン": "地下城",
-    "ワープクリスタル": "传送水晶"
+  const ENGINE_COPY = {
+    rpgm: {
+      label: "RPG Maker MZ/MV",
+      downloadName: "rpgm_translation_package.zip",
+      dropTitle: "把 RPG Maker 游戏的 data 和 js 文件夹拖到这里",
+      dropDescription: "也可以选择整个游戏目录。工具会处理 data/*.json 与 js/*.js。",
+      requirements: [
+        ["必须", "data 文件夹，至少包含 CommonEvents.json、System.json、MapXXX.json 等。"],
+        ["建议", "js 文件夹，尤其是 js/plugins.js 和 js/plugins/*.js。"],
+        ["可以直接丢", "游戏根目录；工具会自动从里面筛出 data 和 js 文件。"]
+      ],
+      scope: [
+        ["默认进入翻译批次", "数据库名称与说明、地图对话、选项、公共事件、战斗事件、系统术语、plugins.js 中较安全的显示文本。"],
+        ["默认进入复核清单", "插件源码里的日文字符串。它们可能是解析别名或内部标签，不能直接批量回填。"],
+        ["默认跳过", "note、脚本、开关变量名、事件名、文件名、图片名、音频名、URL、插件源代码逻辑。"]
+      ]
+    },
+    unity: {
+      label: "Unity / XUnity AutoTranslator",
+      downloadName: "unity_translation_package.zip",
+      dropTitle: "把 Unity 游戏根目录拖到这里",
+      dropDescription: "推荐直接拖整个游戏目录。工具会筛出 *_Data、AutoTranslator 和根目录文本文件。",
+      requirements: [
+        ["必须", "*_Data 文件夹，例如 MissionMermaiden_Data；里面通常有 level*、*.assets、Managed/Assembly-CSharp.dll。"],
+        ["建议", "AutoTranslator 文件夹，尤其是 AutoTranslator/Translation/*/Text/Translated Text.txt。"],
+        ["可选", "根目录 readme.txt、攻略提示.txt、Installation Instructions.txt 等普通文本。"]
+      ],
+      scope: [
+        ["默认进入翻译批次", "XUnity 的 原文=译文 文本表、根目录说明文本、Unity 场景 level* 中高置信日文 UI/剧情文本。"],
+        ["默认进入复核清单", "*.assets 或二进制资源里疑似文本但不够确定的字符串，避免把乱码和资源名拿去翻译。"],
+        ["默认跳过", "*.resS、*.resource、图片音频、exe、运行库 XML、Unity 引擎文档、路径、资源名、明显配置项。"]
+      ]
+    }
   };
 
   let importedFiles = [];
   let lastPackage = null;
 
-  function hasJapanese(value) {
-    return typeof value === "string" && JP_RE.test(value);
+  function engine() {
+    return els.engineType.value || "rpgm";
   }
 
   function normalizePath(path) {
@@ -100,7 +128,15 @@
   }
 
   function filePath(file) {
-    return normalizePath(file.webkitRelativePath || file.relativePath || file.name);
+    return normalizePath(file.relativePath || file.webkitRelativePath || file.name);
+  }
+
+  function basename(path) {
+    return normalizePath(path).split("/").pop() || "";
+  }
+
+  function dirnameParts(path) {
+    return normalizePath(path).split("/").slice(0, -1).map((part) => part.toLowerCase());
   }
 
   function setStatus(message, warn) {
@@ -121,70 +157,6 @@
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
 
-  async function readFileText(file) {
-    return await file.text();
-  }
-
-  async function collectEntryFiles(entry, prefix) {
-    if (entry.isFile) {
-      return await new Promise((resolve) => {
-        entry.file((file) => {
-          file.relativePath = normalizePath(`${prefix}${file.name}`);
-          resolve([file]);
-        });
-      });
-    }
-
-    if (!entry.isDirectory) return [];
-    const reader = entry.createReader();
-    const all = [];
-    async function readChunk() {
-      const entries = await new Promise((resolve) => reader.readEntries(resolve));
-      if (!entries.length) return;
-      for (const child of entries) {
-        const childPrefix = `${prefix}${entry.name}/`;
-        all.push(...await collectEntryFiles(child, childPrefix));
-      }
-      await readChunk();
-    }
-    await readChunk();
-    return all;
-  }
-
-  async function filesFromDataTransfer(dataTransfer) {
-    const files = [];
-    const items = Array.from(dataTransfer.items || []);
-    for (const item of items) {
-      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-      if (entry) {
-        files.push(...await collectEntryFiles(entry, ""));
-      }
-    }
-    if (!files.length) {
-      for (const file of Array.from(dataTransfer.files || [])) files.push(file);
-    }
-    return files;
-  }
-
-  function acceptFiles(files) {
-    importedFiles = Array.from(files).filter((file) => /\.(json|js)$/i.test(file.name));
-    els.fileCount.textContent = String(importedFiles.length);
-    els.candidateCount.textContent = "0";
-    els.batchCount.textContent = "0";
-    lastPackage = null;
-    els.downloadButton.disabled = true;
-    els.copyPromptButton.disabled = true;
-    els.preview.textContent = "暂无输出。";
-    renderSummary([{ key: "已导入文件", value: importedFiles.length }]);
-    setStatus(importedFiles.length ? `已导入 ${importedFiles.length} 个 JSON/JS 文件。` : "没有识别到 JSON 或 JS 文件。", !importedFiles.length);
-  }
-
-  function renderSummary(rows) {
-    els.summaryList.innerHTML = rows.map((row) => `
-      <div><dt>${escapeHtml(row.key)}</dt><dd>${escapeHtml(String(row.value))}</dd></div>
-    `).join("");
-  }
-
   function escapeHtml(value) {
     return String(value)
       .replace(/&/g, "&amp;")
@@ -193,13 +165,192 @@
       .replace(/"/g, "&quot;");
   }
 
-  function addOccurrence(list, item) {
-    if (!hasJapanese(item.source)) return;
+  function hasJapanese(value) {
+    return typeof value === "string" && JP_RE.test(value);
+  }
+
+  function isChineseOnly(value) {
+    const text = String(value || "").trim();
+    if (!text || KANA_TEST_RE.test(text) || LATIN_RE.test(text)) return false;
+    return (text.match(CN_PUNCT_RE) || []).length >= 2;
+  }
+
+  function hasUnityTextSignal(value) {
+    const text = String(value || "").trim();
+    if (!text || URL_RE.test(text) || DECORATION_RE.test(text) || MOSTLY_DECORATION_RE.test(text)) return false;
+    if (/^[0-9\s.,:+\-/%]+$/.test(text)) return false;
+    if (isChineseOnly(text)) return false;
+    if (JP_RE.test(text)) return true;
+    const words = text.match(/[A-Za-z]{2,}/g) || [];
+    return words.length >= 2 && (text.includes(" ") || /[.!?]/.test(text));
+  }
+
+  function renderEngineCopy() {
+    const copy = ENGINE_COPY[engine()];
+    els.dropTitle.textContent = copy.dropTitle;
+    els.dropDescription.textContent = copy.dropDescription;
+    els.requiredFilesHint.innerHTML = copy.requirements.map(([key, value]) => `
+      <div><strong>${escapeHtml(key)}</strong><span>${escapeHtml(value)}</span></div>
+    `).join("");
+    els.scopeGrid.innerHTML = copy.scope.map(([title, text]) => `
+      <div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(text)}</p></div>
+    `).join("");
+  }
+
+  function renderSummary(rows) {
+    els.summaryList.innerHTML = rows.map((row) => `
+      <div><dt>${escapeHtml(row.key)}</dt><dd>${escapeHtml(String(row.value))}</dd></div>
+    `).join("");
+  }
+
+  function isRpgmRelevantFile(file) {
+    return RPGM_FILE_RE.test(filePath(file));
+  }
+
+  function isUnityTextFile(path) {
+    const lower = path.toLowerCase();
+    if (!lower.endsWith(".txt")) return false;
+    if (lower.includes("/mono/") || lower.includes("/managed/") || lower.includes("/reipatcher/")) return false;
+    return true;
+  }
+
+  function isUnityBinaryFile(path) {
+    const normalized = normalizePath(path);
+    const lower = normalized.toLowerCase();
+    const name = basename(lower);
+    if (lower.endsWith(".ress") || lower.endsWith(".resource")) return false;
+    if (/\.(png|jpe?g|gif|webp|ogg|wav|mp3|mp4|exe|xml|config|ini|bak|lnk|aspx|browser|map|info)$/i.test(lower)) return false;
+    if (lower.includes("/mono/") || lower.includes("/reipatcher/") || lower.includes("/translators/")) return false;
+    if (name === "assembly-csharp.dll" || name === "assembly-csharp-firstpass.dll") return true;
+    if (lower.endsWith(".assets")) return true;
+    return /^level\d+$/.test(name) || name === "globalgamemanagers";
+  }
+
+  function isUnityRelevantFile(file) {
+    const path = filePath(file);
+    return isUnityTextFile(path) || isUnityBinaryFile(path);
+  }
+
+  function relevantFiles() {
+    const predicate = engine() === "unity" ? isUnityRelevantFile : isRpgmRelevantFile;
+    const seen = new Set();
+    const result = [];
+    importedFiles.forEach((file) => {
+      const path = filePath(file);
+      if (!predicate(file) || seen.has(path)) return;
+      seen.add(path);
+      result.push(file);
+    });
+    return result;
+  }
+
+  function updateImportedStats() {
+    const files = relevantFiles();
+    els.fileCount.textContent = String(files.length);
+    els.candidateCount.textContent = lastPackage ? String(lastPackage.stats.uniqueItems) : "0";
+    els.batchCount.textContent = lastPackage ? String(lastPackage.stats.batches) : "0";
+    renderSummary([{ key: "已识别文件", value: files.length }]);
+    if (!importedFiles.length) {
+      setStatus("等待导入文件。");
+    } else if (!files.length) {
+      setStatus(`已导入 ${importedFiles.length} 个文件，但没有识别到当前模式可处理的文件。`, true);
+    } else {
+      setStatus(`已导入 ${importedFiles.length} 个文件，当前模式可处理 ${files.length} 个。`);
+    }
+  }
+
+  async function collectEntryFiles(entry, prefix) {
+    const currentPath = normalizePath(prefix ? `${prefix}${entry.name}` : entry.name);
+    if (entry.isFile) {
+      return await new Promise((resolve) => {
+        entry.file((file) => {
+          file.relativePath = currentPath;
+          resolve([file]);
+        }, () => resolve([]));
+      });
+    }
+    if (!entry.isDirectory) return [];
+    const reader = entry.createReader();
+    const all = [];
+    while (true) {
+      const entries = await new Promise((resolve) => reader.readEntries(resolve));
+      if (!entries.length) break;
+      for (const child of entries) {
+        all.push(...await collectEntryFiles(child, `${currentPath}/`));
+      }
+    }
+    return all;
+  }
+
+  async function collectHandleFiles(handle, prefix) {
+    const currentPath = normalizePath(prefix ? `${prefix}${handle.name}` : handle.name);
+    if (handle.kind === "file") {
+      const file = await handle.getFile();
+      file.relativePath = currentPath;
+      return [file];
+    }
+    if (handle.kind !== "directory") return [];
+    const all = [];
+    for await (const child of handle.values()) {
+      all.push(...await collectHandleFiles(child, `${currentPath}/`));
+    }
+    return all;
+  }
+
+  async function filesFromDataTransfer(dataTransfer) {
+    const files = [];
+    const items = Array.from(dataTransfer.items || []);
+    for (const item of items) {
+      if (item.getAsFileSystemHandle) {
+        try {
+          const handle = await item.getAsFileSystemHandle();
+          if (handle) files.push(...await collectHandleFiles(handle, ""));
+          continue;
+        } catch (_) {
+          // Fall back to webkitGetAsEntry or files below.
+        }
+      }
+      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+      if (entry) {
+        files.push(...await collectEntryFiles(entry, ""));
+        continue;
+      }
+      const file = item.getAsFile ? item.getAsFile() : null;
+      if (file) files.push(file);
+    }
+    if (!files.length) {
+      for (const file of Array.from(dataTransfer.files || [])) files.push(file);
+    }
+    return files;
+  }
+
+  function acceptFiles(files) {
+    importedFiles = Array.from(files || []);
+    lastPackage = null;
+    els.downloadButton.disabled = true;
+    els.copyPromptButton.disabled = true;
+    els.preview.textContent = "暂无输出。";
+    els.uploadAdvice.textContent = "导入文件并开始提取后生成。";
+    updateImportedStats();
+  }
+
+  async function readFileText(file) {
+    return await file.text();
+  }
+
+  async function readFileUtf8(file) {
+    const buffer = await file.arrayBuffer();
+    return new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+  }
+
+  function addOccurrence(list, item, signalFn) {
+    if (!signalFn(item.source)) return;
     list.push({
       occurrence_id: `O${String(list.length + 1).padStart(6, "0")}`,
       file: item.file,
       kind: item.kind,
       source: item.source,
+      reference_translation: item.reference_translation || "",
       locator: item.locator || {},
       context_before: item.context_before || [],
       context_after: item.context_after || [],
@@ -207,50 +358,24 @@
     });
   }
 
-  function extractDatabaseFile(file, data, occurrences) {
-    const name = file.split("/").pop();
-    const fields = DATABASE_FIELDS[name];
-    if (!fields || !Array.isArray(data)) return;
-    data.forEach((row, index) => {
-      if (!row || typeof row !== "object") return;
-      fields.forEach((key) => {
-        const value = row[key];
-        if (hasJapanese(value)) {
-          addOccurrence(occurrences, {
-            file,
-            kind: `database_${key}`,
-            source: value,
-            locator: { type: "json", path: [index, key] },
-            note: `id=${row.id || ""}, field=${key}`
-          });
-        }
-      });
-    });
-  }
-
   function valueAtPath(data, path) {
     let value = data;
     for (const part of path) {
-      if (value && Object.prototype.hasOwnProperty.call(value, part)) {
-        value = value[part];
-      } else {
-        return undefined;
-      }
+      if (value && Object.prototype.hasOwnProperty.call(value, part)) value = value[part];
+      else return undefined;
     }
     return value;
   }
 
   function walkSystem(value, path, file, occurrences, contextLines) {
     if (typeof value === "string") {
-      if (hasJapanese(value)) {
-        addOccurrence(occurrences, {
-          file,
-          kind: "system_term",
-          source: value,
-          locator: { type: "json", path },
-          note: path.map((part) => typeof part === "number" ? `[${part}]` : part).join(".")
-        });
-      }
+      addOccurrence(occurrences, {
+        file,
+        kind: "system_term",
+        source: value,
+        locator: { type: "json", path },
+        note: path.map((part) => typeof part === "number" ? `[${part}]` : part).join(".")
+      }, hasJapanese);
       return;
     }
     if (Array.isArray(value)) {
@@ -270,6 +395,25 @@
     if (value && typeof value === "object") {
       Object.keys(value).forEach((key) => walkSystem(value[key], path.concat(key), file, occurrences, contextLines));
     }
+  }
+
+  function extractDatabaseFile(file, data, occurrences) {
+    const name = basename(file);
+    const fields = DATABASE_FIELDS[name];
+    if (!fields || !Array.isArray(data)) return;
+    data.forEach((row, index) => {
+      if (!row || typeof row !== "object") return;
+      fields.forEach((key) => {
+        const value = row[key];
+        addOccurrence(occurrences, {
+          file,
+          kind: `database_${key}`,
+          source: value,
+          locator: { type: "json", path: [index, key] },
+          note: `id=${row.id || ""}, field=${key}`
+        }, hasJapanese);
+      });
+    });
   }
 
   function extractSystemFile(file, data, occurrences, contextLines) {
@@ -308,21 +452,16 @@
         entries.push({ cmdIndex: index, paramPath: ["parameters", 0], kind: "event_text", source: params[0] });
       } else if (code === 102 && Array.isArray(params[0])) {
         params[0].forEach((choice, choiceIndex) => {
-          if (hasJapanese(choice)) {
-            entries.push({ cmdIndex: index, paramPath: ["parameters", 0, choiceIndex], kind: "event_choice", source: choice });
-          }
+          if (hasJapanese(choice)) entries.push({ cmdIndex: index, paramPath: ["parameters", 0, choiceIndex], kind: "event_choice", source: choice });
         });
       } else if ((code === 320 || code === 324 || code === 325) && hasJapanese(params[1])) {
         entries.push({ cmdIndex: index, paramPath: ["parameters", 1], kind: "event_name_change", source: params[1] });
       } else if (code === 357 && params.length >= 4) {
         const found = [];
         collectPluginArgTexts(params[3], ["parameters", 3], found, false);
-        found.forEach((item) => {
-          entries.push({ cmdIndex: index, paramPath: item.path, kind: "event_plugin_text", source: item.source });
-        });
+        found.forEach((item) => entries.push({ cmdIndex: index, paramPath: item.path, kind: "event_plugin_text", source: item.source }));
       }
     });
-
     return entries.map((entry) => ({
       ...entry,
       jsonPath: basePath.concat("list", entry.cmdIndex, entry.paramPath)
@@ -340,20 +479,18 @@
         context_before: entries.slice(Math.max(0, index - contextLines), index).map((item) => item.source),
         context_after: entries.slice(index + 1, index + 1 + contextLines).map((item) => item.source),
         note: owner
-      });
+      }, hasJapanese);
     });
   }
 
   function extractMapFile(file, data, occurrences, contextLines) {
     if (!data || typeof data !== "object") return;
-    if (hasJapanese(data.displayName)) {
-      addOccurrence(occurrences, {
-        file,
-        kind: "map_display_name",
-        source: data.displayName,
-        locator: { type: "json", path: ["displayName"] }
-      });
-    }
+    addOccurrence(occurrences, {
+      file,
+      kind: "map_display_name",
+      source: data.displayName,
+      locator: { type: "json", path: ["displayName"] }
+    }, hasJapanese);
     (data.events || []).forEach((event, eventIndex) => {
       if (!event || typeof event !== "object") return;
       (event.pages || []).forEach((page, pageIndex) => {
@@ -401,7 +538,7 @@
     if (start < 0 || end <= start) return [];
     try {
       return JSON.parse(text.slice(start, end + 1));
-    } catch (error) {
+    } catch (_) {
       return [];
     }
   }
@@ -411,27 +548,13 @@
     plugins.forEach((plugin, pluginIndex) => {
       if (!plugin || typeof plugin !== "object") return;
       if (hasJapanese(plugin.description)) {
-        review.push({
-          file,
-          line: 0,
-          source: plugin.description,
-          context_before: [],
-          context_after: [],
-          reason: "插件说明文字，通常不影响玩家游玩，默认不进入翻译批次。"
-        });
+        review.push({ file, line: 0, source: plugin.description, context_before: [], context_after: [], reason: "插件说明文字默认不进入翻译批次。" });
       }
       const params = plugin.parameters || {};
       Object.keys(params).forEach((key) => {
         const value = params[key];
         if (hasJapanese(key)) {
-          review.push({
-            file,
-            line: 0,
-            source: key,
-            context_before: [plugin.name || ""],
-            context_after: [],
-            reason: "插件参数名可能被代码读取，默认不翻译。"
-          });
+          review.push({ file, line: 0, source: key, context_before: [plugin.name || ""], context_after: [], reason: "插件参数名可能被代码读取，默认不翻译。" });
         }
         if (typeof value === "string" && !looksInternalString(value)) {
           addOccurrence(occurrences, {
@@ -440,18 +563,10 @@
             source: value,
             locator: { type: "plugins_parameter", pluginIndex, key },
             context_before: [plugin.name || "", key],
-            context_after: [],
             note: "plugins.js parameter value"
-          });
+          }, hasJapanese);
         } else if (typeof value === "string" && hasJapanese(value)) {
-          review.push({
-            file,
-            line: 0,
-            source: value,
-            context_before: [plugin.name || "", key],
-            context_after: [],
-            reason: "插件参数值像嵌套 JSON 或内部配置，默认不进入翻译批次。"
-          });
+          review.push({ file, line: 0, source: value, context_before: [plugin.name || "", key], context_after: [], reason: "插件参数值像嵌套 JSON 或内部配置，默认不进入翻译批次。" });
         }
       });
     });
@@ -463,18 +578,10 @@
     const simple = { n: "\n", r: "\r", t: "\t", b: "\b", f: "\f", v: "\v", 0: "\0", "\\": "\\", "'": "'", "\"": "\"", "`": "`" };
     if (Object.prototype.hasOwnProperty.call(simple, c)) return { value: simple[c], next: index + 2 };
     if (c === "x" && index + 3 < raw.length) {
-      const token = raw.slice(index + 2, index + 4);
-      const parsed = Number.parseInt(token, 16);
+      const parsed = Number.parseInt(raw.slice(index + 2, index + 4), 16);
       if (!Number.isNaN(parsed)) return { value: String.fromCharCode(parsed), next: index + 4 };
     }
     if (c === "u") {
-      if (raw[index + 2] === "{") {
-        const end = raw.indexOf("}", index + 3);
-        if (end !== -1) {
-          const parsed = Number.parseInt(raw.slice(index + 3, end), 16);
-          if (!Number.isNaN(parsed)) return { value: String.fromCodePoint(parsed), next: end + 1 };
-        }
-      }
       const token = raw.slice(index + 2, index + 6);
       const parsed = Number.parseInt(token, 16);
       if (token.length === 4 && !Number.isNaN(parsed)) return { value: String.fromCharCode(parsed), next: index + 6 };
@@ -552,14 +659,6 @@
     return low;
   }
 
-  function jsContext(lines, lineNo, contextLines) {
-    const index = lineNo - 1;
-    return {
-      before: lines.slice(Math.max(0, index - contextLines), index),
-      after: lines.slice(index + 1, index + 1 + contextLines)
-    };
-  }
-
   function reviewJsSource(file, text, review, contextLines) {
     if (!hasJapanese(text)) return;
     const starts = lineStarts(text);
@@ -567,25 +666,25 @@
     scanJsStrings(text).forEach((item) => {
       if (looksInternalString(item.source)) return;
       const line = lineNumber(starts, item.start);
-      const context = jsContext(lines, line, contextLines);
+      const index = line - 1;
       review.push({
         file,
         line,
         source: item.source,
-        context_before: context.before,
-        context_after: context.after,
+        context_before: lines.slice(Math.max(0, index - contextLines), index),
+        context_after: lines.slice(index + 1, index + 1 + contextLines),
         reason: "插件源码字符串可能是解析别名或内部标签，默认不进入翻译批次。"
       });
     });
   }
 
-  async function extract(files, options) {
+  async function extractRpgm(files, options) {
     const occurrences = [];
     const review = [];
     const errors = [];
     for (const file of files) {
       const path = filePath(file);
-      const name = path.split("/").pop();
+      const name = basename(path);
       const lower = path.toLowerCase();
       try {
         const text = await readFileText(file);
@@ -607,28 +706,191 @@
     return { occurrences, review, errors };
   }
 
+  function unescapeVisibleText(value) {
+    return String(value || "").replace(/\\r\\n|\\n|\\r/g, "\n").replace(/%3D/g, "=").trim();
+  }
+
+  function normalizeInline(value) {
+    return String(value || "").replace(/\r\n|\r|\n/g, "\\n").replace(/\s+/g, " ").trim();
+  }
+
+  function textLineContext(lines, lineNo, contextLines) {
+    const index = lineNo - 1;
+    return {
+      before: lines.slice(Math.max(0, index - contextLines), index).filter((line) => line.trim()),
+      after: lines.slice(index + 1, index + 1 + contextLines).filter((line) => line.trim())
+    };
+  }
+
+  function extractUnityTextFile(path, text, occurrences, review, options) {
+    const lines = text.split(/\r?\n/);
+    const lower = path.toLowerCase();
+    const isAutoTable = lower.endsWith("autotranslator/translation/en/text/translated text.txt") || lower.includes("/autotranslator/translation/") && lower.includes("/text/");
+    let section = "";
+
+    lines.forEach((line, index) => {
+      const lineNo = index + 1;
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      if (trimmed.startsWith("[") && trimmed.endsWith("]") && !trimmed.includes("=")) {
+        section = trimmed.slice(1, -1);
+        return;
+      }
+      if (isAutoTable && trimmed.includes("=") && !trimmed.toLowerCase().startsWith("sr:")) {
+        const eq = line.indexOf("=");
+        const source = unescapeVisibleText(line.slice(0, eq));
+        const reference = unescapeVisibleText(line.slice(eq + 1));
+        if (!hasUnityTextSignal(source)) return;
+        addOccurrence(occurrences, {
+          file: path,
+          kind: "unity_autotranslator_pair",
+          source,
+          reference_translation: reference,
+          locator: { type: "text_line", line: lineNo },
+          context_before: textLineContext(lines, lineNo, options.contextLines).before,
+          context_after: textLineContext(lines, lineNo, options.contextLines).after,
+          note: section ? `section=${section}` : "XUnity AutoTranslator text table"
+        }, hasUnityTextSignal);
+        return;
+      }
+      const source = normalizeInline(trimmed);
+      if (!hasUnityTextSignal(source)) return;
+      if (lower.includes("/autotranslator/") && !isAutoTable) {
+        review.push({ file: path, line: lineNo, source, reason: "AutoTranslator 辅助文件，默认不进入翻译批次。" });
+        return;
+      }
+      addOccurrence(occurrences, {
+        file: path,
+        kind: "unity_text_document_line",
+        source,
+        locator: { type: "text_line", line: lineNo },
+        context_before: textLineContext(lines, lineNo, options.contextLines).before,
+        context_after: textLineContext(lines, lineNo, options.contextLines).after,
+        note: "plain text document"
+      }, hasUnityTextSignal);
+    });
+  }
+
+  function japaneseScore(text) {
+    const kana = (text.match(KANA_RE) || []).length;
+    const cjk = (text.match(CJK_RE) || []).length;
+    const jp = kana + cjk;
+    const visible = text.replace(/\s/g, "").length || 1;
+    return { kana, cjk, jp, ratio: jp / visible };
+  }
+
+  function isHighConfidenceUnityBinaryText(text) {
+    const s = normalizeInline(text);
+    if (s.length < 3 || s.length > 240) return false;
+    if (ASSET_OR_PATH_RE.test(s) || MOSTLY_DECORATION_RE.test(s)) return false;
+    const score = japaneseScore(s);
+    if (!score.kana || score.jp < 3 || score.ratio < 0.25) return false;
+    if ((s.match(/[?{}^`~|]/g) || []).length >= 3) return false;
+    const latinCount = (s.match(/[A-Za-z0-9]/g) || []).length;
+    if (!s.includes(" ") && latinCount >= 4 && score.ratio < 0.7) return false;
+    if (/[A-Za-z0-9][_=<>][A-Za-z0-9]/.test(s) && score.ratio < 0.8) return false;
+    if ((s.match(/[A-Za-z]{3,}/g) || []).length && score.jp < 4 && !s.includes(" ")) return false;
+    return true;
+  }
+
+  function isReviewWorthyUnityBinaryText(text) {
+    const s = normalizeInline(text);
+    if (s.length < 3 || s.length > 180) return false;
+    if (ASSET_OR_PATH_RE.test(s) || MOSTLY_DECORATION_RE.test(s)) return false;
+    const score = japaneseScore(s);
+    return Boolean(score.kana && score.jp >= 2 && score.ratio >= 0.18);
+  }
+
+  function scanUtf8Strings(text) {
+    const found = [];
+    UTF8_RUN_RE.lastIndex = 0;
+    let match;
+    while ((match = UTF8_RUN_RE.exec(text))) {
+      found.push(normalizeInline(match[0]));
+    }
+    return found;
+  }
+
+  async function extractUnityBinaryFile(file, path, occurrences, review) {
+    const text = await readFileUtf8(file);
+    const seen = new Set();
+    let sequence = 0;
+    for (const value of scanUtf8Strings(text)) {
+      if (!value || seen.has(value)) continue;
+      seen.add(value);
+      sequence += 1;
+      if (isHighConfidenceUnityBinaryText(value)) {
+        addOccurrence(occurrences, {
+          file: path,
+          kind: "unity_binary_utf8_string",
+          source: value,
+          locator: { type: "binary_utf8_string", sequence },
+          note: "Unity binary UTF-8 string"
+        }, hasUnityTextSignal);
+      } else if (isReviewWorthyUnityBinaryText(value)) {
+        review.push({
+          file: path,
+          line: 0,
+          source: value,
+          context_before: [],
+          context_after: [],
+          reason: "二进制资源中疑似文本，但可能是乱码或资源名，默认不进入翻译批次。"
+        });
+      }
+    }
+  }
+
+  async function extractUnity(files, options) {
+    const occurrences = [];
+    const review = [];
+    const errors = [];
+    let processed = 0;
+    for (const file of files) {
+      const path = filePath(file);
+      try {
+        if (isUnityTextFile(path)) {
+          extractUnityTextFile(path, await readFileText(file), occurrences, review, options);
+        } else if (isUnityBinaryFile(path)) {
+          await extractUnityBinaryFile(file, path, occurrences, review);
+        }
+      } catch (error) {
+        errors.push({ file: path, error: error.message });
+      }
+      processed += 1;
+      if (processed % 8 === 0) {
+        setStatus(`正在提取 Unity 文本... ${processed}/${files.length}`);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+    return { occurrences, review, errors };
+  }
+
   function groupOccurrences(occurrences) {
     const groupsBySource = new Map();
     occurrences.forEach((occ) => {
-      if (!groupsBySource.has(occ.source)) {
-        groupsBySource.set(occ.source, {
+      const key = occ.source;
+      if (!groupsBySource.has(key)) {
+        groupsBySource.set(key, {
           id: `T${String(groupsBySource.size + 1).padStart(6, "0")}`,
           source: occ.source,
           translation: "",
+          reference_translation: occ.reference_translation || "",
           kinds: [],
           files: [],
           occurrences: [],
           examples: []
         });
       }
-      const group = groupsBySource.get(occ.source);
+      const group = groupsBySource.get(key);
       group.occurrences.push(occ);
+      if (occ.reference_translation && !group.reference_translation) group.reference_translation = occ.reference_translation;
       if (!group.kinds.includes(occ.kind)) group.kinds.push(occ.kind);
       if (!group.files.includes(occ.file)) group.files.push(occ.file);
       if (group.examples.length < 3) {
         group.examples.push({
           file: occ.file,
           kind: occ.kind,
+          reference_translation: occ.reference_translation || "",
           context_before: occ.context_before,
           context_after: occ.context_after,
           note: occ.note
@@ -643,6 +905,7 @@
       id: group.id,
       source: group.source,
       translation: "",
+      reference_translation: group.reference_translation || "",
       kinds: group.kinds,
       occurrence_count: group.occurrences.length,
       examples: group.examples
@@ -679,10 +942,9 @@
   function recommendUploadPlan(batches, uploadBytes) {
     const maxBatch = Math.max(0, ...batches.map((batch) => batch.bytes));
     const average = batches.length ? batches.reduce((sum, batch) => sum + batch.bytes, 0) / batches.length : 0;
-    let count = 1;
-    if (average > 0) count = Math.max(1, Math.min(3, Math.floor(uploadBytes / average)));
+    let count = average > 0 ? Math.max(1, Math.min(3, Math.floor(uploadBytes / average))) : 1;
     if (maxBatch > uploadBytes * 0.85) count = 1;
-    const large = batches.filter((batch) => batch.bytes > uploadBytes * 0.75).map((batch) => batch.name.split("/").pop());
+    const large = batches.filter((batch) => batch.bytes > uploadBytes * 0.75).map((batch) => basename(batch.name));
     return { count, maxBatch, average, large };
   }
 
@@ -690,13 +952,12 @@
     const candidates = [];
     groups.forEach((group) => {
       const source = group.source.trim();
-      const usefulKind = group.kinds.some((kind) => /name|speaker|display_name|system_term/.test(kind));
-      if (!usefulKind) return;
-      if (!source || source.length > 40) return;
-      if (CONTROL_RE.test(source)) return;
+      const usefulKind = group.kinds.some((kind) => /name|speaker|display_name|system_term|autotranslator|binary_utf8/.test(kind));
+      if (!usefulKind || !source || source.length > 50 || CONTROL_RE.test(source)) return;
       candidates.push({
         id: group.id,
         source,
+        reference_translation: group.reference_translation || "",
         kinds: group.kinds,
         occurrence_count: group.occurrences.length,
         sample_files: group.files.slice(0, 5)
@@ -706,14 +967,18 @@
     return candidates.slice(0, 500);
   }
 
-  function uploadPrompt(adviceCount) {
+  function uploadPrompt(adviceCount, engineKey) {
+    const label = ENGINE_COPY[engineKey].label;
+    const sourceLine = engineKey === "unity"
+      ? "`source` 是需要翻译的非中文文本；`reference_translation` 如果存在，只能作为理解上下文。"
+      : "`source` 是需要翻译的日文文本；`examples` 里的上下文只用于理解，不要翻译上下文。";
     return `# ChatGPT 上传文件翻译提示词
 
-我上传了一个或多个 RPG Maker MZ/MV 游戏文本批次 JSON 文件。请读取上传文件，把里面每条 \`source\` 从日文翻译成简体中文。
+我上传了一个或多个 ${label} 游戏文本批次 JSON 文件。请读取上传文件，把里面每条 source 翻译成简体中文。
 
 ## 输出格式
 
-如果只上传了 1 个批次文件，只返回一个 JSON 数组。数组中每一项只需要：
+如果只上传了 1 个批次文件，请只返回一个 JSON 数组。数组中每一项只需要：
 
 {
   "id": "T000001",
@@ -734,45 +999,37 @@ batch_001_zh.json
 
 ## 翻译规则
 
-1. 只翻译上传文件里的 source，examples 里的上下文只用于理解，不要翻译上下文。
+1. ${sourceLine}
 2. 保留 id，不能改动、删除或重排。
-3. 必须保留所有控制符和占位符，例如 %1、%2、\\G、\\C[14]、\\c[16]、\\I[_icon]、\\V[1]、_actor、_name、_num、_desc1、_class。
-4. 不要翻译文件名、插件名、变量名、代码片段。
-5. 如果 source 是角色名、地名、菜单项或物品名，请按术语表保持一致。
-6. 如果文本明显是系统提示，译文要短，适合游戏窗口显示。
-7. 如果遇到不能确定的专有名词，音译并保持前后一致。
+3. 必须保留所有控制符、占位符、Unity/RPG Maker 富文本标签，例如 %1、\\G、\\C[14]、<color=...>、\\n。
+4. 不要翻译文件名、插件名、变量名、代码片段、路径、URL。
+5. 角色名、地名、菜单项、物品名要前后一致。
+6. 系统提示要短，适合游戏窗口显示。
+7. 遇到不能确定的专有名词，优先音译并保持一致。
 
 建议本项目一次上传 ${adviceCount} 个批次文件。`;
   }
 
-  function glossaryPrompt() {
+  function glossaryPrompt(engineKey) {
     return `# 术语表制作提示词
 
-我上传了 glossary_candidates.json。请根据候选词为 RPG Maker 游戏制作日文到简体中文术语表。
+我上传了 ${ENGINE_COPY[engineKey].label} 游戏的 glossary_candidates.json。请根据候选词制作日文/英文到简体中文的术语表。
 
 要求：
 1. 只返回 JSON 对象。
-2. key 使用原始日文，value 使用简体中文译名。
-3. 人名、地名优先音译，系统词和菜单词按常见游戏译法意译。
-4. 同一角色或地名保持统一。
-5. 不要翻译控制符、文件名、变量名。
-
-输出示例：
-
-{
-  "レイニア": "蕾妮娅",
-  "ギルド": "公会"
-}`;
+2. key 使用原文，value 使用简体中文译名。
+3. 人名、地名优先音译；系统词和菜单词按常见游戏译法意译。
+4. 同一角色、地名、道具、状态名保持统一。
+5. 不要把控制符、文件名、变量名、路径、URL 当成术语。`;
   }
 
-  function guideText(stats, advice) {
+  function guideText(stats, advice, engineKey) {
     const largeNote = advice.large.length ? `\n\n以下批次较大，建议单独上传：${advice.large.join("、")}` : "";
     return `# 操作指南
 
 ## 1. 使用 ChatGPT 翻译
 
 打开 prompts/chatgpt_upload_prompt.md，把提示词复制到 ChatGPT。
-
 然后上传 batches 文件夹里的 batch_001.json、batch_002.json 等文件。
 
 建议一次上传 ${advice.count} 个批次文件。${largeNote}
@@ -784,26 +1041,28 @@ translated_batches/batch_001_zh.json
 ## 2. 术语表
 
 先上传 glossary/glossary_candidates.json，并使用 prompts/glossary_prompt.md 让 ChatGPT 生成术语表。
-
 确认术语表后，可以把术语表内容附加到后续翻译提示词中。
 
 ## 3. 注意事项
 
 - 不要让 ChatGPT 修改 id。
-- 不要让 ChatGPT 删除控制符，例如 %1、\\C[14]、\\G、_actor。
-- review/js_source_review_candidates.json 是插件源码复核清单，默认不要批量翻译回填。
+- 不要让 ChatGPT 删除控制符、占位符、富文本标签。
+- examples/context_before/context_after 是上下文，不是翻译目标。
+- review 文件夹里的内容需要人工复核后再决定是否翻译。
 
 ## 4. 本次统计
 
+- 游戏类型：${ENGINE_COPY[engineKey].label}
 - 导入文件：${stats.fileCount}
 - 可翻译出现位置：${stats.occurrences}
 - 唯一文本：${stats.uniqueItems}
 - 批次文件：${stats.batches}
-- 插件源码复核候选：${stats.reviewCandidates}
+- 复核候选：${stats.reviewCandidates}
 `;
   }
 
   function buildPackage(files, groups, occurrences, review, errors, options) {
+    const engineKey = engine();
     const targetBytes = Math.max(40, options.targetKb) * 1024;
     const uploadBytes = Math.max(80, options.uploadKb) * 1024;
     const batches = splitBatches(groups, targetBytes);
@@ -811,6 +1070,8 @@ translated_batches/batch_001_zh.json
     const candidates = glossaryCandidates(groups);
     const stats = {
       generated_at: new Date().toISOString(),
+      engine: engineKey,
+      engineLabel: ENGINE_COPY[engineKey].label,
       fileCount: files.length,
       occurrences: occurrences.length,
       uniqueItems: groups.length,
@@ -825,6 +1086,8 @@ translated_batches/batch_001_zh.json
     };
 
     const manifest = {
+      engine: engineKey,
+      engine_label: ENGINE_COPY[engineKey].label,
       total_unique_items: groups.length,
       total_occurrences: occurrences.length,
       items: groups
@@ -834,14 +1097,16 @@ translated_batches/batch_001_zh.json
     batches.forEach((batch) => zipFiles.push({ name: batch.name, content: batch.content }));
     zipFiles.push({ name: "manifest.json", content: jsonString(manifest) });
     zipFiles.push({ name: "stats.json", content: jsonString(stats) });
-    zipFiles.push({ name: "prompts/chatgpt_upload_prompt.md", content: uploadPrompt(advice.count) });
-    zipFiles.push({ name: "prompts/glossary_prompt.md", content: glossaryPrompt() });
+    zipFiles.push({ name: "all_translatable_items.json", content: jsonString(groups.map(batchView)) });
+    zipFiles.push({ name: "prompts/chatgpt_upload_prompt.md", content: uploadPrompt(advice.count, engineKey) });
+    zipFiles.push({ name: "prompts/glossary_prompt.md", content: glossaryPrompt(engineKey) });
     zipFiles.push({ name: "glossary/glossary_candidates.json", content: jsonString(candidates) });
-    zipFiles.push({ name: "glossary/glossary_seed.json", content: jsonString(GLOSSARY_SEED) });
-    zipFiles.push({ name: "review/js_source_review_candidates.json", content: jsonString(review) });
-    zipFiles.push({ name: "README_操作指南.md", content: guideText(stats, advice) });
+    zipFiles.push({ name: "glossary/glossary_seed.json", content: "{}\n" });
+    const reviewName = engineKey === "unity" ? "review/binary_string_review_candidates.json" : "review/js_source_review_candidates.json";
+    zipFiles.push({ name: reviewName, content: jsonString(review) });
+    zipFiles.push({ name: "README_操作指南.md", content: guideText(stats, advice, engineKey) });
 
-    return { stats, batches, advice, candidates, zipFiles, prompt: uploadPrompt(advice.count) };
+    return { stats, batches, advice, candidates, zipFiles, prompt: uploadPrompt(advice.count, engineKey) };
   }
 
   function renderResults(pkg) {
@@ -849,13 +1114,14 @@ translated_batches/batch_001_zh.json
     els.candidateCount.textContent = String(pkg.stats.uniqueItems);
     els.batchCount.textContent = String(pkg.stats.batches);
     renderSummary([
+      { key: "游戏类型", value: pkg.stats.engineLabel },
       { key: "导入文件", value: pkg.stats.fileCount },
       { key: "可翻译出现位置", value: pkg.stats.occurrences },
       { key: "唯一文本", value: pkg.stats.uniqueItems },
       { key: "批次文件", value: pkg.stats.batches },
       { key: "最大批次", value: prettySize(pkg.stats.largestBatchBytes) },
       { key: "平均批次", value: prettySize(pkg.stats.averageBatchBytes) },
-      { key: "插件源码复核候选", value: pkg.stats.reviewCandidates },
+      { key: "复核候选", value: pkg.stats.reviewCandidates },
       { key: "解析错误", value: pkg.stats.errors.length }
     ]);
 
@@ -880,9 +1146,7 @@ translated_batches/batch_001_zh.json
     const table = new Uint32Array(256);
     for (let i = 0; i < 256; i += 1) {
       let c = i;
-      for (let k = 0; k < 8; k += 1) {
-        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-      }
+      for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
       table[i] = c >>> 0;
     }
     return table;
@@ -892,9 +1156,7 @@ translated_batches/batch_001_zh.json
 
   function crc32(bytes) {
     let c = 0xffffffff;
-    for (let i = 0; i < bytes.length; i += 1) {
-      c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
-    }
+    for (let i = 0; i < bytes.length; i += 1) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
     return (c ^ 0xffffffff) >>> 0;
   }
 
@@ -929,17 +1191,9 @@ translated_batches/batch_001_zh.json
         ...u32(data.length), ...u32(data.length), ...u16(nameBytes.length), ...u16(0)
       ]);
       chunks.push(local, nameBytes, data);
-      central.push({
-        nameBytes,
-        crc,
-        size: data.length,
-        offset,
-        time: now.time,
-        day: now.day
-      });
+      central.push({ nameBytes, crc, size: data.length, offset, time: now.time, day: now.day });
       offset += local.length + nameBytes.length + data.length;
     });
-
     let centralSize = 0;
     central.forEach((entry) => {
       const header = new Uint8Array([
@@ -951,21 +1205,21 @@ translated_batches/batch_001_zh.json
       chunks.push(header, entry.nameBytes);
       centralSize += header.length + entry.nameBytes.length;
     });
-
-    const end = new Uint8Array([
+    chunks.push(new Uint8Array([
       ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(central.length),
       ...u16(central.length), ...u32(centralSize), ...u32(offset), ...u16(0)
-    ]);
-    chunks.push(end);
+    ]));
     return new Blob(chunks, { type: "application/zip" });
   }
 
   async function runExtraction() {
-    if (!importedFiles.length) {
-      setStatus("请先拖入 data 和 js 文件夹，或选择 JSON/JS 文件。", true);
+    const files = relevantFiles();
+    if (!files.length) {
+      setStatus("请先拖入当前游戏类型需要的文件夹，或选择可处理文件。", true);
       return;
     }
-    setStatus("正在读取并提取文本...");
+    const engineKey = engine();
+    setStatus(engineKey === "unity" ? "正在读取 Unity 文件，深扫可能需要一点时间..." : "正在读取并提取文本...");
     els.runButton.disabled = true;
     try {
       const options = {
@@ -973,9 +1227,9 @@ translated_batches/batch_001_zh.json
         targetKb: Number(els.targetKb.value) || 180,
         uploadKb: Number(els.uploadKb.value) || 450
       };
-      const result = await extract(importedFiles, options);
+      const result = engineKey === "unity" ? await extractUnity(files, options) : await extractRpgm(files, options);
       const groups = groupOccurrences(result.occurrences);
-      lastPackage = buildPackage(importedFiles, groups, result.occurrences, result.review, result.errors, options);
+      lastPackage = buildPackage(files, groups, result.occurrences, result.review, result.errors, options);
       renderResults(lastPackage);
       els.downloadButton.disabled = false;
       els.copyPromptButton.disabled = false;
@@ -994,7 +1248,7 @@ translated_batches/batch_001_zh.json
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "rpgm_translation_package.zip";
+    link.download = ENGINE_COPY[lastPackage.stats.engine].downloadName;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -1003,46 +1257,67 @@ translated_batches/batch_001_zh.json
 
   async function copyPrompt() {
     if (!lastPackage) return;
-    await navigator.clipboard.writeText(lastPackage.prompt);
-    setStatus("已复制 GPT 上传文件翻译提示词。");
+    try {
+      await navigator.clipboard.writeText(lastPackage.prompt);
+      setStatus("已复制 GPT 上传文件翻译提示词。");
+    } catch (_) {
+      setStatus("浏览器阻止了剪贴板写入，请从输出预览中手动复制提示词。", true);
+    }
   }
 
   function clearAll() {
     importedFiles = [];
     lastPackage = null;
-    els.fileCount.textContent = "0";
-    els.candidateCount.textContent = "0";
-    els.batchCount.textContent = "0";
     els.folderInput.value = "";
     els.fileInput.value = "";
     els.downloadButton.disabled = true;
     els.copyPromptButton.disabled = true;
     els.preview.textContent = "暂无输出。";
     els.uploadAdvice.textContent = "导入文件并开始提取后生成。";
+    els.fileCount.textContent = "0";
+    els.candidateCount.textContent = "0";
+    els.batchCount.textContent = "0";
     renderSummary([{ key: "状态", value: "尚未运行" }]);
     setStatus("等待导入文件。");
   }
 
-  els.dropZone.addEventListener("dragover", (event) => {
+  function setDragging(value) {
+    els.dropZone.classList.toggle("dragging", value);
+  }
+
+  document.addEventListener("dragover", (event) => {
     event.preventDefault();
-    els.dropZone.classList.add("dragging");
+    setDragging(true);
   });
 
-  els.dropZone.addEventListener("dragleave", () => {
-    els.dropZone.classList.remove("dragging");
+  document.addEventListener("dragleave", (event) => {
+    if (event.clientX <= 0 || event.clientY <= 0 || event.clientX >= window.innerWidth || event.clientY >= window.innerHeight) {
+      setDragging(false);
+    }
   });
 
-  els.dropZone.addEventListener("drop", async (event) => {
+  document.addEventListener("drop", async (event) => {
     event.preventDefault();
-    els.dropZone.classList.remove("dragging");
+    setDragging(false);
     const files = await filesFromDataTransfer(event.dataTransfer);
     acceptFiles(files);
   });
 
   els.folderInput.addEventListener("change", () => acceptFiles(els.folderInput.files));
   els.fileInput.addEventListener("change", () => acceptFiles(els.fileInput.files));
+  els.engineType.addEventListener("change", () => {
+    renderEngineCopy();
+    lastPackage = null;
+    els.downloadButton.disabled = true;
+    els.copyPromptButton.disabled = true;
+    els.preview.textContent = "暂无输出。";
+    els.uploadAdvice.textContent = "导入文件并开始提取后生成。";
+    updateImportedStats();
+  });
   els.runButton.addEventListener("click", runExtraction);
   els.downloadButton.addEventListener("click", downloadPackage);
   els.copyPromptButton.addEventListener("click", copyPrompt);
   els.clearButton.addEventListener("click", clearAll);
+
+  renderEngineCopy();
 })();

@@ -212,6 +212,43 @@ h3 {
   flex-wrap: wrap;
 }
 
+.requirements {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.requirements h2 {
+  font-size: 18px;
+}
+
+.requirement-list {
+  display: grid;
+  gap: 8px;
+}
+
+.requirement-list div {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.requirement-list div:first-child {
+  border-top: 0;
+}
+
+.requirement-list strong {
+  color: var(--ink);
+}
+
+.requirement-list span {
+  color: var(--muted);
+}
+
 .settings-grid {
   margin-top: 16px;
   display: grid;
@@ -343,7 +380,8 @@ h3 {
   .intro,
   .result-grid,
   .scope-grid,
-  .settings-grid {
+  .settings-grid,
+  .requirement-list div {
     grid-template-columns: 1fr;
   }
 
